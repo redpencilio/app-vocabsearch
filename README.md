@@ -79,3 +79,28 @@ server {
       }
 }
 ```
+
+## Deployment
+
+Deploying the backend can be done using docker-compose, to do so execute `docker-compose up -d` to deploy the backend deamonized.
+When the backend starts up, it takes a few minutes to be responsive, so it's advised to wait a few when the frontend displays an empty page right after restarting or deploying.
+
+## Which logs to monitor
+
+### Vocab-fetch
+
+This service is responsible for downloading a dataset and storing the metadata about it.
+To see its logs use `docker-compose logs -f vocab-fetch` to see them updating live or `docker-compose logs vocab-fetch | less` to search in the logs until now.
+
+### Content-unification
+
+This service is responsible for running the configured unification.
+To see its logs use `docker-compose logs -f content-unification` to see them updating live or `docker-compose logs content-unification | less` to search in the logs until now.
+Note: running the unification might take a while, so don't worry if the job is busy for a long time.
+
+### Ldes-consumer-manager
+
+This service is responsible for creating the containers to download and update LDES datasources.
+Its logs don't tell much, since it only creates other containers, these containers are linked to the `ldes-consumers` network.
+To find all containers in that network `docker network inspect ldes-consumers` can be used.
+
