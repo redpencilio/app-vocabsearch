@@ -46,6 +46,7 @@
           "type": "language-string"
         },
         "sourceDataset": "http://purl.org/dc/terms/source",
+        "datasetEntityUri": "http://www.w3.org/ns/prov#wasDerivedFrom",
         "vocabulary": [
           "http://purl.org/dc/terms/source",
           "^http://mu.semte.ch/vocabularies/ext/sourceDataset"
@@ -55,6 +56,7 @@
       "mappings": {
         "properties": {
           "sourceDataset": { "type": "keyword" },
+          "datasetEntityUri": {"type": "keyword"},
           "vocabulary": {"type": "keyword" },
           "prefLabel": {
             "properties": {

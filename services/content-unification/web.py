@@ -29,10 +29,9 @@ from vocabulary import get_vocabulary
 from dataset import get_dataset
 
 from unification import (
-    unify_from_node_shape,
     get_property_paths,
     get_ununified_batch,
-    delete_from_graph,
+    delete_dataset_subjects_from_graph,
 )
 from remove_vocab import (
     remove_files,
@@ -74,7 +73,7 @@ def run_vocab_unification(vocab_uri):
         print(dataset_versions)
         # TODO: LDES check
         if "data_dump" in dataset_versions[0].keys():
-            new_temp_named_graph = load_file_to_db(
+            temp_named_graph = load_file_to_db(
                 dataset_versions[0]["data_dump"]["value"], VOCAB_GRAPH, temp_named_graph
             )
             if len(dataset_versions) > 1:  # previous dumps exist
@@ -85,9 +84,9 @@ def run_vocab_unification(vocab_uri):
                 # as sorted ntriples files, this can be done on file basis. Would improve perf
                 # and avoid having to load everything to triplestore with python rdflib store
                 # as an intermediary (!)
-                diff_subjects = diff_graphs(old_temp_named_graph, new_temp_named_graph)
+                diff_subjects = diff_graphs(old_temp_named_graph, temp_named_graph)
                 for diff_subjects_batch in batched(diff_subjects, 10):
-                    query_sudo(delete_from_graph(diff_subjects_batch, VOCAB_GRAPH))
+                    query_sudo(delete_dataset_subjects_from_graph(diff_subjects_batch, VOCAB_GRAPH))
                 drop_graph(old_temp_named_graph)
         else:
             # since we now also save ldes datasets to files, ldes datasets can also get
@@ -147,8 +146,8 @@ def delete_vocabulary(vocab_uuid: str):
                 update_sudo(query_string)
         else:
             break
+    # todo: these job deletions are not yet adjusted to the new Jobs structure (which use data containers)      
     update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uuid, VOCAB_GRAPH))
-
     update_sudo(remove_vocab_vocab_unification_jobs(vocab_uuid, VOCAB_GRAPH))
     update_sudo(remove_vocab_partitions(vocab_uuid, VOCAB_GRAPH))
     update_sudo(remove_vocab_source_datasets(vocab_uuid, VOCAB_GRAPH))
