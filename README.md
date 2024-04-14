@@ -149,11 +149,19 @@ Repository: https://github.com/kanselarij-vlaanderen/uuid-generation-service
 
 Data used within a semantic.works-stack (and mu-cl-resources in particular) requires each RDF-object to have a mu:uuid property. Data imported from third parties might not have this uuid. Thus, in order to integrate with other sources while harnessing the power of semantic.works, uuid's need to be added to each imported object. This service does exactly that.
 
+### vocab-configs
+Responsible for exporting and importing one or more vocabularies, to duplicate or transfer vocabularies between application. See `services/vocab-configs`. 
+
 ### vocab-fetch
 Responsible for downloading and analyzing vocabularies. Part of this repository, can be found under `services/vocab-fetch`.
 
 ### content-unification
 Transforms a downloaded vocabulary to a harmonized model so it can be index by mu-search. Part of this repository, can be found under `services/content-unification`.
+
+### webcomponent
+Serves the build webcomponent module file, so it can be references in a script tag. The dispatcher is configured to serve this file under `/webcomponent/main.js`.   
+TODO: this image is not yet published
+
 
 ### ldes-consumer-manager
 Repository: https://github.com/redpencilio/ldes-consumer-manager/
