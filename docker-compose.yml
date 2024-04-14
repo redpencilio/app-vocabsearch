@@ -137,8 +137,8 @@ services:
       - ./config/uuid-generation/:/config
     restart: always
     logging: *default-logging
-  # webcomponent:
-  #   image: vocabsearch-webcomponent
+  webcomponent:
+    image: vocabsearch-webcomponent
   ldes-consumer-manager:
     image: redpencil/ldes-consumer-manager:0.1.0
     environment:

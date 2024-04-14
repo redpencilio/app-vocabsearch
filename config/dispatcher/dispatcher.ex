@@ -20,6 +20,10 @@ defmodule Dispatcher do
   # Run `docker-compose restart dispatcher` after updating
   # this file.
 
+  get "/webcomponent/main.js", @any do
+    forward conn, [], "http://webcomponent/vocab-search-bar.js"
+  end
+
   post "/vocab-download-jobs/:id/run", @json do
     forward conn, [], "http://vocab-fetch/" <> id
   end
