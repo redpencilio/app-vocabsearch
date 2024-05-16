@@ -134,9 +134,11 @@ CONSTRUCT {
                 mu:uuid ?sdUuid;
                 dcterms:type ?type;
                 foaf:page ?page;
-                void:feature ?format;
                 ext:maxRequests ?maxRequests;
                 ext:dereferenceMembers ?derefMembers.
+            OPTIONAL { 
+              ?sourceDataset void:feature ?format .
+            }
         } UNION {
             ?vocab ext:mappingShape ?mappingShape.
             {
