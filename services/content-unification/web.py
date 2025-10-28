@@ -7,6 +7,7 @@ import requests
 from more_itertools import batched
 
 from flask import request
+from app import app
 
 from escape_helpers import sparql_escape, sparql_escape_uri
 from helpers import generate_uuid, logger
@@ -24,7 +25,7 @@ from sparql_util import (
     copy_graph_to_temp,
 )
 
-from task import find_actionable_task_of_type, find_same_scheduled_tasks, get_input_contents_task, run_task, find_actionable_task, run_tasks
+from task import find_actionable_task_of_type, find_same_scheduled_tasks, get_input_contents_task, run_task, find_actionable_task, run_tasks, create_vocab_deletion_task, VOCAB_DELETION_OPERATION
 from vocabulary import get_vocabulary
 from dataset import get_dataset
 
@@ -43,6 +44,8 @@ from remove_vocab import (
     remove_vocab_vocab_unification_jobs,
     remove_vocab_partitions,
     remove_vocab_mapping_shape,
+    remove_vocab_ldes_containers,
+    get_vocab_ldes_containers,
 )
 
 # Maybe make these configurable
@@ -133,27 +136,203 @@ def run_vocab_unification(vocab_uri):
 
 @app.route("/delete-vocabulary/<vocab_uuid>", methods=("DELETE",))
 def delete_vocabulary(vocab_uuid: str):
-    remove_files(vocab_uuid, VOCAB_GRAPH)
-    update_sudo(remove_vocab_data_dumps(vocab_uuid, VOCAB_GRAPH))
+    try:
+        task_query, task_uri = create_vocab_deletion_task(vocab_uuid, VOCAB_GRAPH)
+        update_sudo(task_query)
+        
+        # Start deletion process in background
+        thread = threading.Thread(target=run_scheduled_tasks)
+        thread.start()
+        
+        # Return task URI for status tracking
+        task_id = task_uri.split("/")[-1]
+        return {"message": "Vocabulary deletion started", "task_id": task_id, "status": "scheduled"}, 202
+    except Exception as e:
+        logger.error(f"Failed to create deletion task for vocab {vocab_uuid}: {e}")
+        return {"error": "Failed to start deletion process"}, 500
 
-    # concepts may return too many results in mu-auth internal construct. Batch it here.
-    while True:
-        batch = query_sudo(select_vocab_concepts_batch(vocab_uuid, VOCAB_GRAPH))
-        bindings = batch["results"]["bindings"]
-        if bindings:
-            g = sparql_construct_res_to_graph(batch)
-            for query_string in serialize_graph_to_sparql(g, VOCAB_GRAPH, "DELETE"):
-                update_sudo(query_string)
+
+@app.route("/deletion-status/<task_id>", methods=("GET",))
+def get_deletion_status(task_id: str):
+    """Get the status of a vocabulary deletion task"""
+    try:
+        task_uri = f"http://redpencil.data.gift/id/task/{task_id}"
+        
+        query_template = Template("""
+PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
+PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+PREFIX adms: <http://www.w3.org/ns/adms#>
+PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+
+SELECT ?status ?created ?modified ?vocab_uuid WHERE {
+    GRAPH $graph {
+        $task_uri a task:Task ;
+            adms:status ?status ;
+            dct:created ?created ;
+            task:inputContainer/ext:content ?vocab_uri .
+        OPTIONAL { $task_uri dct:modified ?modified }
+    }
+    BIND(STRAFTER(STR(?vocab_uri), "/") AS ?vocab_uuid)
+}""")
+        
+        query_string = query_template.substitute(
+            graph=sparql_escape_uri(VOCAB_GRAPH),
+            task_uri=sparql_escape_uri(task_uri)
+        )
+        
+        result = query_sudo(query_string)
+        bindings = result["results"]["bindings"]
+        
+        if not bindings:
+            return {"error": "Task not found"}, 404
+        
+        binding = bindings[0]
+        status_uri = binding["status"]["value"]
+        status = status_uri.split("/")[-1]  # Extract status name from URI
+        
+        response = {
+            "task_id": task_id,
+            "status": status,
+            "created": binding["created"]["value"],
+            "vocab_uuid": binding.get("vocab_uuid", {}).get("value", "unknown")
+        }
+        
+        if "modified" in binding:
+            response["modified"] = binding["modified"]["value"]
+        
+        return response, 200
+        
+    except Exception as e:
+        logger.error(f"Failed to get deletion status for task {task_id}: {e}")
+        return {"error": "Failed to get task status"}, 500
+
+
+def execute_vocabulary_deletion(vocab_uuid: str):
+    """Execute the actual vocabulary deletion steps"""
+    try:
+        logger.info(f"Starting deletion of vocabulary {vocab_uuid}")
+        
+        # Step 1: Remove physical files
+        logger.info(f"Removing files for vocabulary {vocab_uuid}")
+        remove_files(vocab_uuid, VOCAB_GRAPH)
+        
+        # Step 2: Remove data dumps
+        logger.info(f"Removing data dumps for vocabulary {vocab_uuid}")
+        update_sudo(remove_vocab_data_dumps(vocab_uuid, VOCAB_GRAPH))
+
+        # Step 3: Remove concepts in batches
+        logger.info(f"Removing concepts for vocabulary {vocab_uuid}")
+        while True:
+            batch = query_sudo(select_vocab_concepts_batch(vocab_uuid, VOCAB_GRAPH))
+            bindings = batch["results"]["bindings"]
+            if bindings:
+                g = sparql_construct_res_to_graph(batch)
+                for query_string in serialize_graph_to_sparql(g, VOCAB_GRAPH, "DELETE"):
+                    update_sudo(query_string)
+            else:
+                break
+        
+        # Step 4: Check and remove LDES containers
+        logger.info(f"Checking for LDES containers for vocabulary {vocab_uuid}")
+        ldes_containers_res = query_sudo(get_vocab_ldes_containers(vocab_uuid, VOCAB_GRAPH))
+        ldes_containers = [binding["datasetGraph"]["value"] for binding in ldes_containers_res["results"]["bindings"]]
+        
+        if ldes_containers:
+            logger.info(f"Found {len(ldes_containers)} LDES containers to remove for vocabulary {vocab_uuid}")
+            
+            # The LDES consumer manager will automatically clean up Docker containers
+            # when it receives delta notifications about dataset deletions.
+            # Our deletion of source datasets will trigger this via the delta system.
+            
+            # Remove LDES container data from triplestore
+            # This should trigger delta notifications that the consumer manager will pick up
+            update_sudo(remove_vocab_ldes_containers(vocab_uuid, VOCAB_GRAPH))
+            
+            logger.info(f"LDES container cleanup will be handled automatically by consumer manager via deltas")
+            
+            # Log the containers that were processed
+            for container in ldes_containers:
+                logger.info(f"LDES container removed from triplestore: {container}")
         else:
-            break
-    # todo: these job deletions are not yet adjusted to the new Jobs structure (which use data containers)      
-    update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_vocab_unification_jobs(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_partitions(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_source_datasets(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_mapping_shape(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_meta(vocab_uuid, VOCAB_GRAPH))
-    return "", 200
+            logger.info(f"No LDES containers found for vocabulary {vocab_uuid}")
+        
+        # Step 5: Remove jobs and metadata
+        logger.info(f"Removing jobs and metadata for vocabulary {vocab_uuid}")
+        update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uuid, VOCAB_GRAPH))
+        update_sudo(remove_vocab_vocab_unification_jobs(vocab_uuid, VOCAB_GRAPH))
+        update_sudo(remove_vocab_partitions(vocab_uuid, VOCAB_GRAPH))
+        update_sudo(remove_vocab_source_datasets(vocab_uuid, VOCAB_GRAPH))
+        update_sudo(remove_vocab_mapping_shape(vocab_uuid, VOCAB_GRAPH))
+        update_sudo(remove_vocab_meta(vocab_uuid, VOCAB_GRAPH))
+        
+        logger.info(f"Successfully deleted vocabulary {vocab_uuid}")
+        return vocab_uuid
+        
+    except Exception as e:
+        logger.error(f"Error during vocabulary deletion {vocab_uuid}: {e}")
+        raise
+
+
+def verify_search_index_cleanup(vocab_uuid: str, max_retries=5, retry_delay=2):
+    """Verify that vocabulary concepts are removed from search index"""
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            # Query search service for concepts from this vocabulary
+            search_url = "http://search/concepts"
+            params = {
+                "filter[vocabulary]": f"http://example-resource.com/vocab/{vocab_uuid}",
+                "page[size]": "1"
+            }
+            
+            response = requests.get(search_url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                concept_count = data.get("meta", {}).get("count", 0)
+                
+                if concept_count == 0:
+                    logger.info(f"Search index cleanup verified for vocabulary {vocab_uuid}")
+                    return True
+                else:
+                    logger.info(f"Search still contains {concept_count} concepts for vocabulary {vocab_uuid}, attempt {attempt + 1}/{max_retries}")
+            else:
+                logger.warning(f"Search query failed with status {response.status_code}, attempt {attempt + 1}/{max_retries}")
+                
+        except Exception as e:
+            logger.warning(f"Search verification error: {e}, attempt {attempt + 1}/{max_retries}")
+        
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+            retry_delay *= 1.5  # Exponential backoff
+    
+    logger.warning(f"Search index cleanup could not be verified for vocabulary {vocab_uuid} after {max_retries} attempts")
+    return False
+
+
+def execute_vocabulary_deletion_with_verification(vocab_uuid: str):
+    """Execute vocabulary deletion and verify search index cleanup"""
+    # Extract vocab_uuid from URI if needed
+    if vocab_uuid.startswith("http://"):
+        vocab_uuid = vocab_uuid.split("/")[-1]
+    
+    try:
+        # Execute the deletion
+        result = execute_vocabulary_deletion(vocab_uuid)
+        
+        # Verify search index cleanup
+        logger.info(f"Verifying search index cleanup for vocabulary {vocab_uuid}")
+        search_verified = verify_search_index_cleanup(vocab_uuid)
+        
+        if not search_verified:
+            logger.warning(f"Vocabulary {vocab_uuid} deleted from database but may still be in search index")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Vocabulary deletion failed for {vocab_uuid}: {e}")
+        raise
 
 
 running_tasks_lock = threading.Lock()
@@ -169,7 +348,7 @@ def run_scheduled_tasks():
 
     try:
         while True:
-            task_q = find_actionable_task_of_type([CONT_UN_OPERATION], TASKS_GRAPH)
+            task_q = find_actionable_task_of_type([CONT_UN_OPERATION, VOCAB_DELETION_OPERATION], TASKS_GRAPH)
             task_res = query_sudo(task_q)
             if task_res["results"]["bindings"]:
                 (task_uri, task_operation) = binding_results(
@@ -193,10 +372,20 @@ def run_scheduled_tasks():
                         query_sudo,
                         update_sudo,
                     )
+                elif task_operation == VOCAB_DELETION_OPERATION:
+                    logger.debug(f"Running deletion task {task_uri}, operation {task_operation}")
+                    logger.debug(f"Deleting at the same time: {' | '.join(similar_tasks)}")
+                    run_tasks(
+                        similar_tasks,
+                        TASKS_GRAPH,
+                        lambda sources: [execute_vocabulary_deletion_with_verification(sources[0])],
+                        query_sudo,
+                        update_sudo,
+                    )
 
-            finally:
-                logger.warn(
-                    f"Problem while running task {task_uri}, operation {task_operation}"
+            except Exception as e:
+                logger.error(
+                    f"Problem while running task {task_uri}, operation {task_operation}: {e}"
                 )
     finally:
         running_tasks_lock.release()

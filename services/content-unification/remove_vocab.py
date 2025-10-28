@@ -247,3 +247,54 @@ WHERE {
         vocab_uuid=sparql_escape_string(vocab_uuid),
     )
     return query_string
+
+
+def remove_vocab_ldes_containers(vocab_uuid: str, graph: str) -> str:
+    query_template = Template("""
+PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+PREFIX void: <http://rdfs.org/ns/void#>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+WITH $graph
+DELETE {
+    ?datasetGraph ?datasetGraphPred ?datasetGraphObj .
+}
+WHERE {
+    ?vocab a ext:VocabularyMeta ;
+           mu:uuid $vocab_uuid .
+    ?vocab ext:sourceDataset ?sourceDataset .
+    ?sourceDataset dct:type <http://vocabsearch.data.gift/dataset-types/LDES> ;
+                   ext:datasetGraph ?datasetGraph .
+    ?datasetGraph ?datasetGraphPred ?datasetGraphObj .
+}
+    """)
+    query_string = query_template.substitute(
+        graph=sparql_escape_uri(graph),
+        vocab_uuid=sparql_escape_string(vocab_uuid),
+    )
+    return query_string
+
+
+def get_vocab_ldes_containers(vocab_uuid: str, graph: str) -> str:
+    query_template = Template("""
+PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+PREFIX void: <http://rdfs.org/ns/void#>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+SELECT ?datasetGraph WHERE {
+    GRAPH $graph {
+        ?vocab a ext:VocabularyMeta ;
+               mu:uuid $vocab_uuid .
+        ?vocab ext:sourceDataset ?sourceDataset .
+        ?sourceDataset dct:type <http://vocabsearch.data.gift/dataset-types/LDES> ;
+                       ext:datasetGraph ?datasetGraph .
+    }
+}
+    """)
+    query_string = query_template.substitute(
+        graph=sparql_escape_uri(graph),
+        vocab_uuid=sparql_escape_string(vocab_uuid),
+    )
+    return query_string

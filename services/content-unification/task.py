@@ -17,6 +17,8 @@ STATUS_SCHEDULED = "http://redpencil.data.gift/id/concept/JobStatus/scheduled"
 STATUS_SUCCESS = "http://redpencil.data.gift/id/concept/JobStatus/success"
 STATUS_FAILED = "http://redpencil.data.gift/id/concept/JobStatus/failed"
 
+VOCAB_DELETION_OPERATION = "http://mu.semte.ch/vocabularies/ext/VocabDeletionJob"
+
 
 def attach_task_results_container(task, results, graph=MU_APPLICATION_GRAPH):
     CONTAINER_URI_PREFIX = 'http://redpencil.data.gift/id/container/'
@@ -254,3 +256,56 @@ def run_tasks(task_uris, graph, runner_func, sparql_query, sparql_update):
     # logger.info(
     # f"Finished running job at {start_time}, took {end_time - start_time} seconds"
     # )
+
+
+def create_vocab_deletion_task(vocab_uuid, graph=MU_APPLICATION_GRAPH):
+    task_uuid = generate_uuid()
+    task_uri = f"http://redpencil.data.gift/id/task/{task_uuid}"
+    container_uuid = generate_uuid()
+    container_uri = f"http://redpencil.data.gift/id/container/{container_uuid}"
+    time = datetime.datetime.now()
+
+    query_template = Template("""
+PREFIX task: <http://redpencil.data.gift/vocabularies/tasks/>
+PREFIX mu: <http://mu.semte.ch/vocabularies/core/>
+PREFIX adms: <http://www.w3.org/ns/adms#>
+PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX ext: <http://mu.semte.ch/vocabularies/ext/>
+PREFIX nfo: <http://www.semanticdesktop.org/ontologies/2007/03/22/nfo#>
+
+INSERT {
+    GRAPH $graph {
+        $task_uri a task:Task ;
+            mu:uuid $task_uuid ;
+            dct:created $created ;
+            adms:status $status ;
+            task:operation $operation ;
+            task:inputContainer $container .
+        
+        $container a nfo:DataContainer ;
+            mu:uuid $container_uuid ;
+            ext:content $vocab_uuid_uri .
+    }
+}
+WHERE {
+    GRAPH $graph {
+        # Verify vocabulary exists
+        ?vocabMeta a <http://mu.semte.ch/vocabularies/ext/VocabularyMeta> ;
+                    mu:uuid $vocab_uuid .
+    }
+}""")
+
+    query_string = query_template.substitute(
+        graph=sparql_escape_uri(graph),
+        task_uri=sparql_escape_uri(task_uri),
+        task_uuid=sparql_escape_string(task_uuid),
+        created=sparql_escape_datetime(time),
+        status=sparql_escape_uri(STATUS_SCHEDULED),
+        operation=sparql_escape_uri(VOCAB_DELETION_OPERATION),
+        container=sparql_escape_uri(container_uri),
+        container_uuid=sparql_escape_string(container_uuid),
+        vocab_uuid=sparql_escape_string(vocab_uuid),
+        vocab_uuid_uri=sparql_escape_uri(f"http://example-resource.com/vocab/{vocab_uuid}")
+    )
+    
+    return query_string, task_uri
