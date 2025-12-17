@@ -39,6 +39,7 @@
     ("http://mu.semte.ch/vocabularies/ext/VocabDownloadJob" -> _)
     ("http://mu.semte.ch/vocabularies/ext/MetadataExtractionJob" -> _)
     ("http://mu.semte.ch/vocabularies/ext/ContentUnificationJob" -> _)
+    ("http://mu.semte.ch/vocabularies/ext/VocabDeleteJob" -> _)
     ("http://mu.semte.ch/vocabularies/ext/VocabsExportJob" -> _)
     ("http://mu.semte.ch/vocabularies/ext/VocabsImportJob" -> _)
     ("http://vocab.deri.ie/cogs#Job" -> _)

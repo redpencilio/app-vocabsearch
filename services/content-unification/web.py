@@ -25,7 +25,7 @@ from sparql_util import (
 )
 
 from task import find_actionable_task_of_type, find_same_scheduled_tasks, get_input_contents_task, run_task, find_actionable_task, run_tasks
-from vocabulary import get_vocabulary
+from vocabulary import get_vocabulary, vocabulary_uri
 from dataset import get_dataset
 
 from unification import (
@@ -34,15 +34,11 @@ from unification import (
     delete_dataset_subjects_from_graph,
 )
 from remove_vocab import (
-    remove_files,
-    select_vocab_concepts_batch,
-    remove_vocab_data_dumps,
-    remove_vocab_source_datasets,
-    remove_vocab_meta,
-    remove_vocab_vocab_fetch_jobs,
-    remove_vocab_vocab_unification_jobs,
-    remove_vocab_partitions,
-    remove_vocab_mapping_shape,
+    VOCAB_DELETE_OPERATION,
+    VOCAB_DELETE_WAIT_OPERATION,
+    start_vocab_delete_task,
+    run_vocab_delete_operation,
+    run_vocab_delete_wait_operation
 )
 
 # Maybe make these configurable
@@ -52,6 +48,7 @@ TEMP_GRAPH_BASE = "http://example-resource.com/graph/"
 VOCAB_GRAPH = "http://mu.semte.ch/graphs/public"
 UNIFICATION_TARGET_GRAPH = "http://mu.semte.ch/graphs/public"
 MU_APPLICATION_GRAPH = os.environ.get("MU_APPLICATION_GRAPH")
+DATA_GRAPH = "http://mu.semte.ch/graphs/public"
 TEMP_GRAPH_BASE = "http://example-resource.com/graph/"
 
 CONT_UN_OPERATION = "http://mu.semte.ch/vocabularies/ext/ContentUnificationJob"
@@ -133,27 +130,14 @@ def run_vocab_unification(vocab_uri):
 
 @app.route("/delete-vocabulary/<vocab_uuid>", methods=("DELETE",))
 def delete_vocabulary(vocab_uuid: str):
-    remove_files(vocab_uuid, VOCAB_GRAPH)
-    update_sudo(remove_vocab_data_dumps(vocab_uuid, VOCAB_GRAPH))
+    task_uuid = generate_uuid()
+    logger.info(f"Deleting vocab {vocab_uuid}, task id: {task_uuid}")
+    vocab_iri = query_sudo(vocabulary_uri(vocab_uuid, DATA_GRAPH))["results"]["bindings"][0]["vocabulary"]["value"]
+    update_sudo(start_vocab_delete_task(vocab_iri, task_uuid, TASKS_GRAPH))
 
-    # concepts may return too many results in mu-auth internal construct. Batch it here.
-    while True:
-        batch = query_sudo(select_vocab_concepts_batch(vocab_uuid, VOCAB_GRAPH))
-        bindings = batch["results"]["bindings"]
-        if bindings:
-            g = sparql_construct_res_to_graph(batch)
-            for query_string in serialize_graph_to_sparql(g, VOCAB_GRAPH, "DELETE"):
-                update_sudo(query_string)
-        else:
-            break
-    # todo: these job deletions are not yet adjusted to the new Jobs structure (which use data containers)      
-    update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_vocab_unification_jobs(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_partitions(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_source_datasets(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_mapping_shape(vocab_uuid, VOCAB_GRAPH))
-    update_sudo(remove_vocab_meta(vocab_uuid, VOCAB_GRAPH))
-    return "", 200
+    return {
+        'meta': { 'task_id': task_uuid }
+    }
 
 
 running_tasks_lock = threading.Lock()
@@ -169,7 +153,9 @@ def run_scheduled_tasks():
 
     try:
         while True:
-            task_q = find_actionable_task_of_type([CONT_UN_OPERATION], TASKS_GRAPH)
+            task_q = find_actionable_task_of_type(
+                [CONT_UN_OPERATION, VOCAB_DELETE_OPERATION, VOCAB_DELETE_WAIT_OPERATION],
+                TASKS_GRAPH)
             task_res = query_sudo(task_q)
             if task_res["results"]["bindings"]:
                 (task_uri, task_operation) = binding_results(
@@ -191,6 +177,27 @@ def run_scheduled_tasks():
                     lambda sources: [run_vocab_unification(sources[0])],
                     query_sudo,
                     update_sudo,
+                )
+            elif task_operation == VOCAB_DELETE_OPERATION:
+                logger.debug(f"Running task {task_uri}, operation {task_operation}")
+                logger.debug(f"Updating at the same time: {' | '.join(similar_tasks)}")
+                run_tasks(
+                    similar_tasks,
+                    TASKS_GRAPH,
+                    lambda sources: [run_vocab_delete_operation(sources[0])],
+                    query_sudo,
+                    update_sudo,
+                )
+            elif task_operation == VOCAB_DELETE_WAIT_OPERATION:
+                logger.debug(f"Running task {task_uri}, operation {task_operation}")
+                logger.debug(f"Updating at the same time: {' | '.join(similar_tasks)}")
+                run_tasks(
+                    similar_tasks,
+                    TASKS_GRAPH,
+                    lambda sources: [run_vocab_delete_wait_operation(sources[0])],
+                    query_sudo,
+                    update_sudo,
+                    thread=True
                 )
     finally:
         running_tasks_lock.release()

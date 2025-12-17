@@ -18,6 +18,20 @@
       }
     ]
   },
+  "http://lblod.data.gift/id/jobs/concept/JobOperation/vocab-delete": {
+    "tasksConfiguration": [
+      {
+        "currentOperation": null,
+        "nextOperation": "http://mu.semte.ch/vocabularies/ext/VocabDeleteJob",
+        "nextIndex": "0"
+      },
+      {
+        "currentOperation": "http://mu.semte.ch/vocabularies/ext/VocabDeleteJob",
+        "nextOperation": "http://mu.semte.ch/vocabularies/ext/VocabDeleteWaitJob",
+        "nextIndex": "1"
+      }
+    ]
+  },
   "http://lblod.data.gift/id/jobs/concept/JobOperation/vocabs-export": {
     "tasksConfiguration": [
       {

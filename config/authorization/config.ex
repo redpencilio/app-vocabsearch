@@ -31,6 +31,7 @@ defmodule Acl.UserGroups.Config do
                         "http://mu.semte.ch/vocabularies/ext/VocabDownloadJob",
                         "http://mu.semte.ch/vocabularies/ext/MetadataExtractionJob",
                         "http://mu.semte.ch/vocabularies/ext/ContentUnificationJob",
+                        "http://mu.semte.ch/vocabularies/ext/VocabDeleteJob",
                         "http://mu.semte.ch/vocabularies/ext/VocabsExportJob",
                         "http://mu.semte.ch/vocabularies/ext/VocabsImportJob",
                         "http://vocab.deri.ie/cogs#Job",
