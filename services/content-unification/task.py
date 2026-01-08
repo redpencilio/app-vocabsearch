@@ -218,7 +218,8 @@ def run_task(task_uri, graph, runner_func, sparql_query, sparql_update):
 
 # run the first task in task_uris, but set the status for all the given tasks
 # useful for tasks that are the same
-def run_tasks(task_uris, graph, runner_func, sparql_query, sparql_update):
+def run_tasks(task_uris, graph, runner_func, sparql_query, sparql_update, thread=False):
+    import threading
     task_uri = task_uris[0]
     # start_time = time.time()
 
@@ -236,20 +237,28 @@ def run_tasks(task_uris, graph, runner_func, sparql_query, sparql_update):
     logger.info(f"Started running task {task_uri}")
 
     sparql_update(update_tasks_status(task_uris, STATUS_BUSY, graph))
-    try:
-        generated = runner_func(used)
-        if generated:
-            logger.info(
-                f"Running task <{task_uri}> with source <{used[0]}> generated <{generated[0]}>"
-            )
-            for task in task_uris:
-              sparql_update(attach_task_results_container(task, generated, graph))
-        sparql_update(update_tasks_status(task_uris, STATUS_SUCCESS, graph))
-        return generated
-    except Exception as e:
-        logger.warn(f"Failed running task {task_uri}")
-        logger.warn(traceback.format_exc())
-        sparql_update(update_tasks_status(task_uris, STATUS_FAILED, graph))
+
+    def thread_runner():
+        try:
+            generated = runner_func(used)
+            if generated:
+                logger.info(
+                    f"Running task <{task_uri}> with source <{used[0]}> generated <{generated[0]}>"
+                )
+                for task in task_uris:
+                  sparql_update(attach_task_results_container(task, generated, graph))
+            sparql_update(update_tasks_status(task_uris, STATUS_SUCCESS, graph))
+            return generated
+        except Exception as e:
+            logger.warn(f"Failed running task {task_uri}")
+            logger.warn(traceback.format_exc())
+            sparql_update(update_tasks_status(task_uris, STATUS_FAILED, graph))
+
+    if thread:
+        thread = threading.Thread(target=thread_runner)
+        thread.start()
+    else:
+        thread_runner()
 
     # end_time = time.time()
     # logger.info(
