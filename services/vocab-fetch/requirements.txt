@@ -1,4 +1,4 @@
 rdflib == 6.2.0
-requests ~= 2.28.1
+requests ~= 2.34.2
 more-itertools == 9.0.0
 apscheduler==3.10.4
