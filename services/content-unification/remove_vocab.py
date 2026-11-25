@@ -4,7 +4,7 @@ from string import Template
 from helpers import query, logger, generate_uuid
 from escape_helpers import sparql_escape_uri, sparql_escape_string, sparql_escape_datetime
 from file import shared_uri_to_path
-from sudo_query import query_sudo, auth_update_sudo as update_sudo
+from sudo_query import update_sudo
 from sparql_util import (
     binding_results,
     serialize_graph_to_sparql,
@@ -84,30 +84,30 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 def run_vocab_delete_operation(vocab_uri):
     remove_files(vocab_uri, VOCAB_GRAPH)
-    update_sudo(remove_vocab_data_dumps(vocab_uri, VOCAB_GRAPH))
+    update_sudo(remove_vocab_data_dumps(vocab_uri, VOCAB_GRAPH), max_retries=0)
 
     # concepts may return too many results in mu-auth internal construct. Batch it here.
     while True:
-        batch = query_sudo(select_vocab_concepts_batch(vocab_uri, VOCAB_GRAPH))
+        batch = query(select_vocab_concepts_batch(vocab_uri, VOCAB_GRAPH), sudo=True)
         bindings = batch["results"]["bindings"]
         if bindings:
             g = sparql_construct_res_to_graph(batch)
             for query_string in serialize_graph_to_sparql(g, VOCAB_GRAPH, "DELETE"):
-                update_sudo(query_string)
+                update_sudo(query_string, max_retries=0)
         else:
             break
     # todo: these job deletions are not yet adjusted to the new Jobs structure (which use data containers)
-    update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uri, VOCAB_GRAPH))
-    update_sudo(remove_vocab_vocab_unification_jobs(vocab_uri, VOCAB_GRAPH))
-    update_sudo(remove_vocab_partitions(vocab_uri, VOCAB_GRAPH))
-    update_sudo(remove_vocab_source_datasets(vocab_uri, VOCAB_GRAPH))
-    update_sudo(remove_vocab_mapping_shape(vocab_uri, VOCAB_GRAPH))
+    update_sudo(remove_vocab_vocab_fetch_jobs(vocab_uri, VOCAB_GRAPH), max_retries=0)
+    update_sudo(remove_vocab_vocab_unification_jobs(vocab_uri, VOCAB_GRAPH), max_retries=0)
+    update_sudo(remove_vocab_partitions(vocab_uri, VOCAB_GRAPH), max_retries=0)
+    update_sudo(remove_vocab_source_datasets(vocab_uri, VOCAB_GRAPH), max_retries=0)
+    update_sudo(remove_vocab_mapping_shape(vocab_uri, VOCAB_GRAPH), max_retries=0)
 
-    update_sudo(start_vocab_delete_wait_task(vocab_uri, TASKS_GRAPH))
+    update_sudo(start_vocab_delete_wait_task(vocab_uri, TASKS_GRAPH), max_retries=0)
     return vocab_uri
 
 def remove_files(vocab_uri: str, graph: str):
-    response = query_sudo(find_file_paths(vocab_uri, graph))
+    response = query(find_file_paths(vocab_uri, graph), sudo=True)
     for binding in response['results']['bindings']:
         uri = binding['dataSource']['value']
         path = shared_uri_to_path(uri)
@@ -427,7 +427,7 @@ def run_vocab_delete_wait_operation(vocab_uri):
             break
 
     logger.info(f"Vocab removed from search in {tries} tries: {vocab_uri}")
-    update_sudo(remove_vocab_meta(vocab_uri, VOCAB_GRAPH))
+    update_sudo(remove_vocab_meta(vocab_uri, VOCAB_GRAPH), max_retries=0)
 
 def count_concepts_in_search(vocab_uri) -> int:
     import requests

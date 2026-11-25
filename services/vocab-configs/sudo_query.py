@@ -41,8 +41,8 @@ def update_sudo(the_query, attempt=0, max_retries=5):
     Retries the update with an exponential backoff in the case of failure."""
     try:
         start = time.time()
-        logger.debug(f"started query at {datetime.datetime.now()}")
-        logger.debug("execute query: \n" + the_query)
+        logger.debug(f"started update at {datetime.datetime.now()}")
+        logger.debug("execute update: \n" + the_query)
 
         update(the_query, sudo=True)
 
@@ -57,5 +57,5 @@ def update_sudo(the_query, attempt=0, max_retries=5):
 
             update_sudo(the_query, attempt + 1, max_retries)
         else:
-            logger.error("Max attempts reached for query. Skipping.")
+            logger.error("Max attempts reached for update. Skipping.")
             raise e
