@@ -11,7 +11,7 @@ services:
   identifier:
     ports:
       - 0.0.0.0:3033:80
-    image: semtech/mu-identifier:1.10.1
+    image: semtech/mu-identifier:1.11.0
     environment:
       SESSION_COOKIE_SECURE: "on"
     links:
@@ -19,7 +19,7 @@ services:
     restart: always
     logging: *default-logging
   dispatcher:
-    image: semtech/mu-dispatcher:2.1.0-beta.2
+    image: semtech/mu-dispatcher:2.1.1
     links:
       - resource:resource
     volumes:
@@ -45,7 +45,7 @@ services:
     restart: always
     logging: *default-logging
   triplestore:
-    image: redpencil/virtuoso:1.2.0-rc.1
+    image: redpencil/virtuoso:1.4.0
     environment:
       SPARQL_UPDATE: "true"
       DEFAULT_GRAPH: "http://mu.semte.ch/application"
@@ -55,7 +55,7 @@ services:
     restart: always
     logging: *default-logging
   migrations:
-    image: semtech/mu-migrations-service:0.8.0
+    image: semtech/mu-migrations-service:0.9.0
     links:
       - triplestore:database
     volumes:
@@ -63,7 +63,7 @@ services:
     restart: always
     logging: *default-logging
   file:
-    image: semtech/mu-file-service:3.2.0
+    image: semtech/mu-file-service:3.5.3
     environment:
       FILE_RESOURCE_BASE: "http://example-resource.com/files/"
     volumes:
@@ -79,7 +79,7 @@ services:
     restart: always
     logging: *default-logging
   search:
-    image: semtech/mu-search:0.10.0
+    image: semtech/mu-search:0.12.1
     volumes:
       - ./config/search:/config
     restart: always
@@ -87,7 +87,7 @@ services:
     environment:
       JAVA_OPTS: "-Xms1g -Xmx4g"    
   elasticsearch:
-    image: semtech/mu-search-elastic-backend:1.0.0
+    image: semtech/mu-search-elastic-backend:1.3.1
     volumes:
       - ./data/elasticsearch/:/usr/share/elasticsearch/data
     ulimits:
@@ -104,7 +104,7 @@ services:
     restart: always
     logging: *default-logging
   job-controller:
-    image: lblod/job-controller-service:1.0.1
+    image: lblod/job-controller-service:1.4.3
     volumes:
       - ./config/job-controller/:/config/
     restart: always
@@ -140,7 +140,7 @@ services:
     restart: always
     logging: *default-logging
   uuid-generation:
-    image: redpencil/uuid-generation:0.4.0
+    image: redpencil/uuid-generation:0.4.1
     volumes:
       - ./config/uuid-generation/:/config
     restart: always
