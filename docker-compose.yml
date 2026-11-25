@@ -14,7 +14,6 @@ services:
     image: semtech/mu-identifier:1.10.1
     environment:
       SESSION_COOKIE_SECURE: "on"
-      DEFAULT_ACCESS_CONTROL_ALLOW_ORIGIN_HEADER: "*"
     links:
       - dispatcher:dispatcher
     restart: always
@@ -49,7 +48,6 @@ services:
     image: redpencil/virtuoso:1.2.0-rc.1
     environment:
       SPARQL_UPDATE: "true"
-      ENABLE_CORS: "*"
       DEFAULT_GRAPH: "http://mu.semte.ch/application"
     volumes:
       - ./data/db:/data
@@ -109,9 +107,6 @@ services:
     image: lblod/job-controller-service:1.0.1
     volumes:
       - ./config/job-controller/:/config/
-    environment:
-      LOG_SPARQL_QUERIES: "true"
-      LOG_SPARQL_UPDATES: "true"
     restart: always
     logging: *default-logging
   vocab-fetch:
@@ -176,14 +171,6 @@ services:
       MU_AUTH_ENDPOINT: "http://database:8890/sparql"
     volumes:
       - ./data/files:/share
-  yasgui:
-    # DEV purpose: debug built in triplestore
-    image: redpencil/yasgui:latest
-    environment:
-      DEFAULT_SPARQL_ENDPOINT: "http://docker-dev:8890/sparql"
-    # that should be in the setup script | same exposed port as graphdb
-    ports:
-      - 3034:80
 networks:
   ldes-consumers:
     name: ldes-consumers

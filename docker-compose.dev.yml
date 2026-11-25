@@ -1,26 +1,68 @@
 services:
+  frontend:
+    restart: no
   identifier:
+    restart: no
     ports:
       - 80:80
+    environment:
+      DEFAULT_ACCESS_CONTROL_ALLOW_ORIGIN_HEADER: "*"
+  dispatcher:
+    restart: no
   delta-notifier:
+    restart: no
     environment:
       - DEBUG_DELTA_SEND=true
       - DEBUG_DELTA_MATCH=true
       - DEBUG_TRIPLE_MATCHES_SPEC=true
   database:
+    restart: no
     environment:
       LOG_OUTGOING_SPARQL_QUERIES: "true"
       LOG_INCOMING_SPARQL_QUERIES: "true"
   triplestore:
+    restart: no
     ports:
       - "8890:8890"
-  ldes-consumer-manager:
     environment:
-      LOG_LEVEL: "DEBUG"
+      SPARQL_UPDATE: "true"
+      ENABLE_CORS: "*"
+  migrations:
+    restart: no
+  file:
+    restart: no
+  resource:
+    restart: no
+  search:
+    restart: no
+  elasticsearch:
+    restart: no
+  job-controller:
+    restart: no
+    environment:
+      LOG_SPARQL_QUERIES: "true"
+      LOG_SPARQL_UPDATES: "true"
   vocab-fetch:
+    restart: no
     environment:
       LOG_LEVEL: "DEBUG"
   content-unification:
+    restart: no
     environment:
       LOG_LEVEL: "DEBUG"
-
+  uuid-generation:
+    restart: no
+  ldes-consumer-manager:
+    restart: no
+    environment:
+      LOG_LEVEL: "DEBUG"
+  vocab-configs:
+    restart: no
+  yasgui:
+    # DEV purpose: debug built in triplestore
+    image: redpencil/yasgui:latest
+    environment:
+      DEFAULT_SPARQL_ENDPOINT: "http://docker-dev:8890/sparql"
+    # that should be in the setup script | same exposed port as graphdb
+    ports:
+      - 3034:80
