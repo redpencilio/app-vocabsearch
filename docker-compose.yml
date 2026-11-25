@@ -172,8 +172,8 @@ services:
       MU_APPLICATION_FILE_STORAGE_PATH: "vocab-configs/"
       MODE: "${MODE:-production}"
       MU_SPARQL_ENDPOINT: "http://database:8890/sparql"
+      MU_SPARQL_UPDATEPOINT: "http://database:8890/sparql"
       MU_SPARQL_DIRECT_UPDATEPOINT:  "http://triplestore:8890/sparql"
-      MU_AUTH_ENDPOINT: "http://database:8890/sparql"
     volumes:
       - ./data/files:/share
   yasgui:
