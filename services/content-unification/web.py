@@ -10,10 +10,8 @@ from more_itertools import batched
 from flask import request
 
 from escape_helpers import sparql_escape, sparql_escape_uri
-from helpers import generate_uuid, logger
-from helpers import query as sparql_query
-from helpers import update as sparql_update
-from sudo_query import query_sudo, auth_update_sudo as update_sudo
+from helpers import generate_uuid, logger, query
+from sudo_query import update_sudo
 
 from sparql_util import (
     binding_results,
@@ -71,9 +69,9 @@ def build_temp_graphs(datasets):
     temp_named_graph = TEMP_GRAPH_BASE + generate_uuid()
 
     for dataset in datasets:
-        dataset_versions = query_sudo(
-            get_dataset(dataset, VOCAB_GRAPH)
-        )["results"]["bindings"]
+        dataset_versions = query(
+            get_dataset(dataset, VOCAB_GRAPH),
+            sudo=True)["results"]["bindings"]
 
         if "dataset_graph" in dataset_versions[0].keys():
             graphs.add(dataset_versions[0]["dataset_graph"]["value"])
@@ -91,7 +89,7 @@ def build_temp_graphs(datasets):
     return list(graphs), temp_named_graph
 
 def run_vocab_unification(vocab_uri):
-    vocab_sources = query_sudo(get_vocabulary(vocab_uri, VOCAB_GRAPH))["results"][
+    vocab_sources = query(get_vocabulary(vocab_uri, VOCAB_GRAPH), sudo=True)["results"][
         "bindings"
     ]
 
@@ -105,7 +103,7 @@ def run_vocab_unification(vocab_uri):
       prop_paths_qs = get_property_paths(
           vocab_sources[0]["mappingShape"]["value"], VOCAB_GRAPH
       )
-      prop_paths_res = query_sudo(prop_paths_qs)
+      prop_paths_res = query(prop_paths_qs, sudo=True)
 
       for path_props in prop_paths_res["results"]["bindings"]:
         # Delete obsolete entities first
@@ -123,7 +121,7 @@ def run_vocab_unification(vocab_uri):
                 target_graph=VOCAB_GRAPH,
                 batch_size=UNIFICATION_BATCH_SIZE,
              )
-            batch_res = query_sudo(delete_subjects_batch_qs)
+            batch_res = query(delete_subjects_batch_qs, sudo=True)
             if not batch_res["results"]["bindings"]:
                 logger.info("Finished deleting obsolete unifications")
                 break
@@ -134,7 +132,7 @@ def run_vocab_unification(vocab_uri):
                 target_subjects=[b["targetSubject"]["value"] for b in batch_res["results"]["bindings"]],
                 target_graph=VOCAB_GRAPH
             )
-            update_sudo(delete_subjects_qs)
+            update_sudo(delete_subjects_qs, max_retries=0)
             if(SLEEP_MS_BETWEEN_QUERIES_UNIFY and SLEEP_MS_BETWEEN_QUERIES_UNIFY >0 ):
               logger.info(f"Waiting for {SLEEP_MS_BETWEEN_QUERIES_UNIFY} ms")
               time.sleep(SLEEP_MS_BETWEEN_QUERIES_UNIFY / 1000)
@@ -156,7 +154,7 @@ def run_vocab_unification(vocab_uri):
                 batch_size=UNIFICATION_BATCH_SIZE,
             )
             # We might want to dump intermediary unified content to file before committing to store
-            batch_res = query_sudo(get_batch_qs)
+            batch_res = query(get_batch_qs, sudo=True)
             if not batch_res["results"]["bindings"]:
                 logger.info("Finished unification")
                 break
@@ -164,7 +162,7 @@ def run_vocab_unification(vocab_uri):
                 logger.info("Running unification batch")
             g = sparql_construct_res_to_graph(batch_res)
             for query_string in serialize_graph_to_sparql(g, VOCAB_GRAPH):
-                update_sudo(query_string)
+                update_sudo(query_string, max_retries=0)
             if(SLEEP_MS_BETWEEN_QUERIES_UNIFY and SLEEP_MS_BETWEEN_QUERIES_UNIFY > 0 ):
               logger.info(f"Waiting for {SLEEP_MS_BETWEEN_QUERIES_UNIFY} ms")
               time.sleep(SLEEP_MS_BETWEEN_QUERIES_UNIFY / 1000)
@@ -189,7 +187,7 @@ def filter_count():
         source_filter=source_filter,
         graph=TASKS_GRAPH
     )
-    query_sudo(qs)
+    query(qs, sudo=True)
     return {
         'meta': {
             'task_uuid': task_uuid
@@ -198,7 +196,7 @@ def filter_count():
 
 def run_filter_count_task(input):
     input_qs = get_filter_count_input(input)
-    input_res = query_sudo(input_qs)
+    input_res = query(input_qs, sudo=True)
     input_bindings= input_res["results"]["bindings"][0]
 
     dataset_uri = input_bindings["dataset"]["value"]
@@ -221,7 +219,7 @@ def run_filter_count_task(input):
             source_class, source_path_string, source_filter, dataset_graphs
         )
     try:
-        filter_res = query_sudo(count_query)
+        filter_res = query(count_query, sudo=True)
     except (EndPointInternalError) as e:
         output_uri, qs = write_filter_count_output(
                 graph=DATA_GRAPH,
@@ -230,11 +228,11 @@ def run_filter_count_task(input):
                 valid=False,
                 error=str(e),
         )
-        update_sudo(qs)
+        update_sudo(qs, max_retries=0)
         return output_uri
     finally:
         drop_graph(temp_named_graph)
-        update_sudo(remove_filter_count_input(input_uri=input, graph=DATA_GRAPH))
+        update_sudo(remove_filter_count_input(input_uri=input, graph=DATA_GRAPH), max_retries=0)
 
     count = filter_res["results"]["bindings"][0]["count"]["value"]
     count = int(count)
@@ -247,7 +245,7 @@ def run_filter_count_task(input):
         count=count,
         warning=warning
     )
-    update_sudo(qs)
+    update_sudo(qs, max_retries=0)
     return output_uri
 
 
@@ -255,8 +253,8 @@ def run_filter_count_task(input):
 def delete_vocabulary(vocab_uuid: str):
     task_uuid = generate_uuid()
     logger.info(f"Deleting vocab {vocab_uuid}, task id: {task_uuid}")
-    vocab_iri = query_sudo(vocabulary_uri(vocab_uuid, DATA_GRAPH))["results"]["bindings"][0]["vocabulary"]["value"]
-    update_sudo(start_vocab_delete_task(vocab_iri, task_uuid, TASKS_GRAPH))
+    vocab_iri = query(vocabulary_uri(vocab_uuid, DATA_GRAPH), sudo=True)["results"]["bindings"][0]["vocabulary"]["value"]
+    update_sudo(start_vocab_delete_task(vocab_iri, task_uuid, TASKS_GRAPH), max_retries=0)
 
     return {
         'meta': { 'task_id': task_uuid }
@@ -279,7 +277,7 @@ def run_scheduled_tasks():
             task_q = find_actionable_task_of_type(
                 [CONT_UN_OPERATION, FILTER_COUNT_OPERATION, VOCAB_DELETE_OPERATION, VOCAB_DELETE_WAIT_OPERATION],
                 TASKS_GRAPH)
-            task_res = query_sudo(task_q)
+            task_res = query(task_q, sudo=True)
             if task_res["results"]["bindings"]:
                 (task_uri, task_operation) = binding_results(
                     task_res, ("uri", "operation")
@@ -287,9 +285,9 @@ def run_scheduled_tasks():
             else:
                 logger.debug("No more tasks found")
                 return
-            inputs_res =  query_sudo(get_input_contents_task(task_uri, TASKS_GRAPH))
+            inputs_res = query(get_input_contents_task(task_uri, TASKS_GRAPH), sudo=True)
             inputs = binding_results(inputs_res, "content")
-            similar_tasks_res = query_sudo(find_same_scheduled_tasks(task_operation, inputs,  TASKS_GRAPH))
+            similar_tasks_res = query(find_same_scheduled_tasks(task_operation, inputs,  TASKS_GRAPH), sudo=True)
             similar_tasks = binding_results(similar_tasks_res, "uri")
             if task_operation == CONT_UN_OPERATION:
                 logger.debug(f"Running task {task_uri}, operation {task_operation}")
@@ -298,8 +296,8 @@ def run_scheduled_tasks():
                     similar_tasks,
                     TASKS_GRAPH,
                     lambda sources: [run_vocab_unification(sources[0])],
-                    query_sudo,
-                    update_sudo,
+                    lambda query_string: query(query_string, sudo=True),
+                    lambda update_string: update_sudo(update_string, max_retries=0),
                 )
             elif task_operation == FILTER_COUNT_OPERATION:
                 logger.debug(f"Running task {task_uri}, operation {task_operation}")
@@ -308,8 +306,8 @@ def run_scheduled_tasks():
                     similar_tasks,
                     TASKS_GRAPH,
                     lambda sources: [run_filter_count_task(sources[0])],
-                    query_sudo,
-                    update_sudo,
+                    lambda query_string: query(query_string, sudo=True),
+                    lambda update_string: update_sudo(update_string, max_retries=0),
                 )
             elif task_operation == VOCAB_DELETE_OPERATION:
                 logger.debug(f"Running task {task_uri}, operation {task_operation}")
@@ -318,8 +316,8 @@ def run_scheduled_tasks():
                     similar_tasks,
                     TASKS_GRAPH,
                     lambda sources: [run_vocab_delete_operation(sources[0])],
-                    query_sudo,
-                    update_sudo,
+                    lambda query_string: query(query_string, sudo=True),
+                    lambda update_string: update_sudo(update_string, max_retries=0),
                 )
             elif task_operation == VOCAB_DELETE_WAIT_OPERATION:
                 logger.debug(f"Running task {task_uri}, operation {task_operation}")
@@ -328,8 +326,8 @@ def run_scheduled_tasks():
                     similar_tasks,
                     TASKS_GRAPH,
                     lambda sources: [run_vocab_delete_wait_operation(sources[0])],
-                    query_sudo,
-                    update_sudo,
+                    lambda query_string: query(query_string, sudo=True),
+                    lambda update_string: update_sudo(update_string, max_retries=0),
                     thread=True
                 )
     finally:

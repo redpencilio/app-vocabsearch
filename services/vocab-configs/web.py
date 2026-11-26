@@ -7,8 +7,8 @@ import requests
 from escape_helpers import sparql_escape, sparql_escape_uri
 from flask import request
 from helpers import generate_uuid, logger
-from helpers import query, update
-from sudo_query import query_sudo, update_sudo
+from helpers import query
+from sudo_query import update_sudo
 
 from vocabularies import (
     get_vocabs_config_triples,
@@ -52,7 +52,7 @@ LDES_TYPE = "http://vocabsearch.data.gift/dataset-types/LDES"
 
 
 def do_vocab_export(vocab_uris):
-    construct_json = query_sudo(get_vocabs_config_triples(vocab_uris))
+    construct_json = query(get_vocabs_config_triples(vocab_uris), sudo=True)
     g = sparql_construct_res_to_graph(construct_json)
     phys_uuid = generate_uuid()
     phys_filename = "export_" + phys_uuid + ".ttl"
@@ -90,7 +90,7 @@ def do_vocab_export(vocab_uris):
 
 def vocab_config_file_to_graph(file_uri: str, files_graph: str):
     query_string = construct_get_file_query(file_uri, files_graph)
-    file_result = query_sudo(query_string)["results"]["bindings"][0]
+    file_result = query(query_string, sudo=True)["results"]["bindings"][0]
 
     g = Graph()
     g.parse(shared_uri_to_path(file_result["physicalFile"]["value"]))
@@ -106,14 +106,14 @@ def import_vocab_configs(file_uri):
         update_sudo(query_string)
 
     # check if alias is already in use
-    matching_aliases_results = query_sudo(matching_aliasses_in_graph(graph_uri))
+    matching_aliases_results = query(matching_aliasses_in_graph(graph_uri), sudo=True)
     matching_aliases = binding_results(matching_aliases_results, ("vocab", "alias"))
     # remove those from the import graph
     if matching_aliases:
         update_sudo(remove_aliases_vocabs(matching_aliases, graph_uri))
 
     # remove overlap for UUID of vocab and sourceDatasets UUIDs and mapping UUIDs
-    matching_uris_results = query_sudo(matching_uris_in_graph(graph_uri))
+    matching_uris_results = query(matching_uris_in_graph(graph_uri), sudo=True)
 
     for uri in binding_results(matching_uris_results, "uri"):
         base = uri.rsplit("/", 1)[0] + "/"
@@ -125,13 +125,13 @@ def import_vocab_configs(file_uri):
     update_sudo(copy_vocabs_configs_from_graph(graph_uri))
 
     # get the vocab URIs that were imported
-    new_vocab_uris_results = query_sudo(vocab_uris_from_graph(graph_uri))
+    new_vocab_uris_results = query(vocab_uris_from_graph(graph_uri), sudo=True)
     new_vocab_uris = binding_results(new_vocab_uris_results, "uri")
     # remove import graph
     drop_graph(graph_uri)
     # start a download task for the new vocabs
     for vocab_uri in new_vocab_uris:
-        datasets_results = query_sudo(datasets_of_vocab(vocab_uri))
+        datasets_results = query(datasets_of_vocab(vocab_uri), sudo=True)
         for dataset_uri, data_type in binding_results(
             datasets_results, ("uri", "data_type")
         ):
@@ -157,7 +157,7 @@ def run_tasks():
             task_q = find_actionable_task_of_type(
                 [VOCAB_EXPORT_OPERATION, VOCAB_IMPORT_OPERATION], TASKS_GRAPH
             )
-            task_res = query_sudo(task_q)
+            task_res = query(task_q, sudo=True)
             if task_res["results"]["bindings"]:
                 (task_uri, task_operation) = binding_results(
                     task_res, ("uri", "operation")
@@ -172,7 +172,7 @@ def run_tasks():
                         task_uri,
                         TASKS_GRAPH,
                         lambda sources: do_vocab_export(sources),
-                        query_sudo,
+                        query,
                         update_sudo,
                     )
                 elif task_operation == VOCAB_IMPORT_OPERATION:
@@ -181,7 +181,7 @@ def run_tasks():
                         task_uri,
                         TASKS_GRAPH,
                         lambda fileUris: import_vocab_configs(fileUris[0]),
-                        query_sudo,
+                        query,
                         update_sudo,
                     )
             finally:

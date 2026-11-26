@@ -8,7 +8,7 @@ from more_itertools import batched
 from format_to_mime import FORMAT_TO_MIME_EXT
 from helpers import generate_uuid, logger
 from helpers import query, update
-from sudo_query import query_sudo, update_sudo
+from sudo_query import update_sudo
 import requests
 BATCH_SIZE = 100
 

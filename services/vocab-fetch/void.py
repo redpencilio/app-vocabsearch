@@ -1,7 +1,7 @@
 from string import Template
 from helpers import query, update
 from helpers import generate_uuid, logger
-from sudo_query import query_sudo, update_sudo
+from sudo_query import update_sudo
 from escape_helpers import sparql_escape, sparql_escape_uri, sparql_escape_string
 
 VOID_GRAPH_URI_BASE = "http://example.com/graph/"

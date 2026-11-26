@@ -118,6 +118,9 @@ services:
     environment:
       MU_APPLICATION_FILE_STORAGE_PATH: "dataset-dumps/"
       MU_VIRTUOSO_ENDPOINT: "http://triplestore:8890/sparql"
+      MU_SPARQL_ENDPOINT: "http://database:8890/sparql"
+      MU_SPARQL_UPDATEPOINT:  "http://database:8890/sparql"
+      MU_SPARQL_DIRECT_UPDATEPOINT:  "http://triplestore:8890/sparql"
       # Making dataset dumps takes a long time with the current sparql-implementation
       # (2:45 for Marine Regions for example). Perform no more than once per 24h
       UPDATE_DATASET_DUMP_CRON_PATTERN: "0 23 * * *"
@@ -132,8 +135,8 @@ services:
     environment:
       MU_APPLICATION_FILE_STORAGE_PATH: "dataset-dumps/"
       MU_SPARQL_ENDPOINT: "http://database:8890/sparql"
-      MU_SPARQL_UPDATEPOINT:  "http://triplestore:8890/sparql"
-      MU_AUTH_ENDPOINT: "http://database:8890/sparql"
+      MU_SPARQL_UPDATEPOINT: "http://database:8890/sparql"
+      MU_SPARQL_DIRECT_UPDATEPOINT:  "http://triplestore:8890/sparql"
       SLEEP_MS_BETWEEN_QUERIES_UNIFY: "2000"
       # FIXME: always run in dev mode to circumvent memory limitations
       MODE: "development"
@@ -148,7 +151,7 @@ services:
   webcomponent:
     image: ghcr.io/vlizbe/vocabserver-webcomponent:${BUILD_TAG:-latest}
   ldes-consumer-manager:
-    image: redpencil/ldes-consumer-manager:feature-new-client-use-exising-graph
+    image: redpencil/ldes-consumer-manager:feature-python-upgrade
     environment:
       MU_NETWORK: ldes-consumers
       MODE: "${MODE:-production}"
@@ -167,8 +170,8 @@ services:
       MU_APPLICATION_FILE_STORAGE_PATH: "vocab-configs/"
       MODE: "${MODE:-production}"
       MU_SPARQL_ENDPOINT: "http://database:8890/sparql"
+      MU_SPARQL_UPDATEPOINT: "http://database:8890/sparql"
       MU_SPARQL_DIRECT_UPDATEPOINT:  "http://triplestore:8890/sparql"
-      MU_AUTH_ENDPOINT: "http://database:8890/sparql"
     volumes:
       - ./data/files:/share
 networks:

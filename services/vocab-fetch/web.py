@@ -6,9 +6,8 @@ import threading
 import requests
 from escape_helpers import sparql_escape, sparql_escape_uri
 from flask import request
-from helpers import generate_uuid, logger
-from helpers import query, update
-from sudo_query import query_sudo, update_sudo
+from helpers import generate_uuid, logger, query
+from sudo_query import update_sudo
 
 from rdflib import Graph, URIRef, Literal
 from void import generateVoID, deleteVoID
@@ -50,7 +49,7 @@ UPDATE_DATASET_DUMP_CRON_PATTERN = os.environ.get("UPDATE_DATASET_DUMP_CRON_PATT
 
 def load_dataset_file(uri: str, graph: str = MU_APPLICATION_GRAPH):
     query_string = construct_get_file_query(uri, graph)
-    file_result = query_sudo(query_string)["results"]["bindings"][0]
+    file_result = query(query_string, sudo=True)["results"]["bindings"][0]
 
     g = Graph()
     g.parse(shared_uri_to_path(file_result["physicalFile"]["value"]))
@@ -142,7 +141,7 @@ SELECT DISTINCT ?task_uri WHERE {
     return query_res["results"]["bindings"][0]["task_uri"]["value"]
 
 def redownload_dataset(dataset_uri):
-    dataset_result = query_sudo(get_dataset(dataset_uri, VOID_DATASET_GRAPH))['results']['bindings'][0]
+    dataset_result = query(get_dataset(dataset_uri, VOID_DATASET_GRAPH), sudo=True)['results']['bindings'][0]
     _type = dataset_result['type']['value']
     if _type == LDES_TYPE:
         # graph = dataset_result['dataset_graph']['value']
@@ -174,7 +173,7 @@ def run_dataset_download_route(task_uuid: str):
         task_uri,
         TASKS_GRAPH,
         lambda sources: [redownload_dataset(sources[0])],
-        query_sudo,
+        lambda query_string: query(query_string, sudo=True),
         update_sudo,
     )
 
@@ -185,7 +184,7 @@ def run_dataset_download_route(task_uuid: str):
 def generate_dataset_structural_metadata(dataset_uri, should_return_vocab):
     try:
         logger.info(f"Starting metadata generation for dataset: {dataset_uri}")
-        dataset_res = query_sudo(get_dataset(dataset_uri, VOID_DATASET_GRAPH))["results"][
+        dataset_res = query(get_dataset(dataset_uri, VOID_DATASET_GRAPH), sudo=True)["results"][
             "bindings"
         ][0]
 
@@ -269,7 +268,7 @@ def run_tasks():
             task_q = find_actionable_task_of_type(
                 [VOCAB_DOWNLOAD_OPERATION, METADATA_EXTRACTION_OPERATION], TASKS_GRAPH
             )
-            task_res = query_sudo(task_q)
+            task_res = query(task_q, sudo=True)
             if task_res["results"]["bindings"]:
                 (task_uri, task_operation, job_operation) = binding_results(
                     task_res, ("uri", "operation", "job_operation")
@@ -284,7 +283,7 @@ def run_tasks():
                         task_uri,
                         TASKS_GRAPH,
                         lambda sources: [redownload_dataset(sources[0])],
-                        query_sudo,
+                        lambda query_string: query(query_string, sudo=True),
                         update_sudo,
                     )
 
@@ -301,7 +300,7 @@ def run_tasks():
                         lambda sources: [
                             generate_dataset_structural_metadata(sources[0], should_return_vocab)
                         ],
-                        query_sudo,
+                        lambda query_string: query(query_string, sudo=True),
                         update_sudo,
                     )
             except:

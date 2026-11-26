@@ -1,3 +1,4 @@
-FROM semtech/mu-python-template:2.0.0-beta.1
+FROM semtech/mu-python-template:feature-semantic-ai-fixes
 LABEL maintainer=""
 ENV LOG_LEVEL="DEBUG"
+ENV ALLOW_MU_AUTH_SUDO="true"

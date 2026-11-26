@@ -1,7 +1,7 @@
 from escape_helpers import sparql_escape_uri
-from helpers import logger, generate_uuid
+from helpers import logger, generate_uuid, query
 
-from sudo_query import query_sudo, update_sudo as update_virtuoso
+from sudo_query import direct_update_triplestore
 from file import construct_get_file_query, shared_uri_to_path
 
 import os
@@ -78,28 +78,28 @@ WHERE {
         old_graph=sparql_escape_uri(graph),
         new_graph=sparql_escape_uri(temp_named_graph),
     )
-    update_virtuoso(query_string)
+    direct_update_triplestore(query_string)
     return temp_named_graph
 
 def upload_file_to_graph(file, graph):
     g = Graph()
     g.parse(file)
     for query_string in serialize_graph_to_sparql(g, graph):
-        update_virtuoso(query_string)
+        direct_update_triplestore(query_string)
 
 def load_file_to_db(uri: str, metadata_graph: str = MU_APPLICATION_GRAPH, temp_named_graph=None):
     if not temp_named_graph:
         temp_named_graph = TEMP_GRAPH_BASE + generate_uuid()
     query_string = construct_get_file_query(uri, metadata_graph)
-    file_result = query_sudo(query_string)['results']['bindings'][0]
+    file_result = query(query_string, sudo=True)['results']['bindings'][0]
     upload_file_to_graph(shared_uri_to_path(file_result['physicalFile']['value']), temp_named_graph)
     return temp_named_graph
 
 def drop_graph(graph):
-    update_virtuoso("DROP SILENT GRAPH {}".format(sparql_escape_uri(graph)))
+    direct_update_triplestore("DROP SILENT GRAPH {}".format(sparql_escape_uri(graph)))
 
 def diff_graphs(graph_old, graph_new):
-    query_res = query_sudo(Template("""
+    query_res = query(Template("""
 SELECT DISTINCT ?s
 WHERE {
     GRAPH $new_graph {
@@ -114,6 +114,6 @@ WHERE {
 """).substitute(
     old_graph=sparql_escape_uri(graph_old),
     new_graph=sparql_escape_uri(graph_new),
-))
+), sudo=True)
     s = [b['s']['value'] for b in query_res['results']['bindings']]
     return s
