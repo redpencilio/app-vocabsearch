@@ -151,13 +151,14 @@ services:
   webcomponent:
     image: ghcr.io/vlizbe/vocabserver-webcomponent:${BUILD_TAG:-latest}
   ldes-consumer-manager:
-    image: redpencil/ldes-consumer-manager:feature-python-upgrade
+    image: redpencil/ldes-consumer-manager:feature-state-volumes
     environment:
       MU_NETWORK: ldes-consumers
       MODE: "${MODE:-production}"
-      CONSUMER_IMAGE: redpencil/ldes-consumer:0.9.0
+      CONSUMER_IMAGE: redpencil/ldes-consumer:feature-mu-auth-scope-support
       COMPOSE_PROJECT: "vocabserver-app"
       REMOVE_CONTAINERS_ON_DELETE: "true" # delete containers if dataset gets deleted
+      CONSUMER_STATE_DIR: "$PWD/data/consumers"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
     restart: always
